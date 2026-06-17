@@ -1,7 +1,10 @@
-/* This code has been lifted (with permission) from the open-source MIT licensed big-AGI project.
- * https://github.com/enricoros/big-AGI
+/* The streaming player below was lifted (with permission) from the open-source
+ * MIT licensed big-AGI project. https://github.com/enricoros/big-AGI
+ *
+ * It is provider-agnostic: it consumes the `audio/mpeg` stream returned by
+ * `/api/speech`, whichever backend (ElevenLabs or 60db) produced it.
  */
-import type { SpeechInputSchema } from "@/app/api/elevenlabs/speech/route";
+import type { SpeechInputSchema, TTSProvider } from "@/lib/tts/schema";
 
 export class AudioLivePlayer {
   private readonly audioContext: AudioContext;
@@ -134,15 +137,17 @@ export class AudioLivePlayer {
 export async function EXPERIMENTAL_speakTextStream(
   text: string,
   voiceId?: string,
+  provider?: TTSProvider,
 ) {
   if (!text?.trim()) return;
 
   try {
-    const edgeResponse = await frontendFetchAPIElevenLabsSpeech(
+    const edgeResponse = await frontendFetchSpeech(
       text,
       voiceId,
       false,
       true,
+      provider,
     );
 
     // if (!liveAudioPlayer)
@@ -155,28 +160,31 @@ export async function EXPERIMENTAL_speakTextStream(
   }
 }
 
-async function frontendFetchAPIElevenLabsSpeech(
+async function frontendFetchSpeech(
   text: string,
   voiceId: string | undefined,
   nonEnglish: boolean,
   streaming: boolean,
+  provider: TTSProvider | undefined,
 ): Promise<Response> {
-  // NOTE: hardcoded 1000 as a failsafe, since the API will take very long and consume lots of credits for longer texts
+  // NOTE: hardcoded char cap as a failsafe, since the API will take very long
+  // and consume lots of credits for longer texts. Applies to every provider.
   const speechInput: SpeechInputSchema = {
     text: text.slice(0, 100),
     ...(voiceId && { voiceId }),
+    ...(provider && { provider }),
     nonEnglish,
     ...(streaming && { streaming: true, streamOptimization: 4 }),
   };
 
-  const response = await fetch("/api/elevenlabs/speech", {
+  const response = await fetch("/api/speech", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(speechInput),
   });
 
   if (!response.ok) {
-    const errorData = await response.json();
+    const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.error || errorData.message || "Unknown error");
   }
 

@@ -11,7 +11,7 @@ import { FilteredImage } from "@/components/filteredimage";
 import { FilterId, getFilterVoiceId } from "@/lib/filters";
 import DynamicSkeleton from "./dynamicskeleton";
 import { Replies } from "@/components/replies";
-import { EXPERIMENTAL_speakTextStream } from "@/lib/elevenlabs.client";
+import { EXPERIMENTAL_speakTextStream } from "@/lib/tts.client";
 import { classifyTweetByContent } from "@/app/actions";
 
 // set to false to always show the original picture

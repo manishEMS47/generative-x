@@ -16,6 +16,10 @@ Under the hood, there's a nextjs application and a chrome extension used to pull
 Let's start by running the nextjs app wwhich will use a sample twitter feed
 1. Add your OPENAI_API_KEY and ELEVENLABS_API_KEY (used for tts)  
 `cp .env.local.example .env.local`
+
+   Text-to-speech runs through a single provider-agnostic endpoint and supports
+   both **ElevenLabs** (default) and **[60db](https://60db.ai)**. See
+   [Text-to-Speech Providers](#text-to-speech-providers) below to switch.
 2. Run the application   
 `npm run dev`
 3. Try out the image filters (these will be snappy as they're cached)
@@ -58,6 +62,53 @@ This component will try to match the clothing items in a tweet image to items in
 
 5. `Reply.tsx`  
 Renders a few suggested replies with tts in a reply component. This is the default component is there are not other components rendered.
+
+## Text-to-Speech Providers
+The 🔊 speaker icons on tweets and suggested replies use text-to-speech. The app
+ships with two interchangeable TTS backends behind one endpoint:
+
+- **ElevenLabs** — the original provider (default)
+- **[60db](https://60db.ai)** — multilingual TTS, added alongside ElevenLabs
+
+Both are accessed through the provider-agnostic edge route `app/api/speech`, and
+both stream `audio/mpeg`, so the rest of the app (the streaming player, the UI,
+the per-filter voice plumbing) behaves identically no matter which one is active.
+
+### Choosing a provider
+Set the `TTS_PROVIDER` env var in `.env.local`:
+
+```bash
+# ElevenLabs (default — nothing to change)
+TTS_PROVIDER=elevenlabs
+ELEVENLABS_API_KEY=your-elevenlabs-key
+
+# 60db
+TTS_PROVIDER=60db
+SIXTYDB_API_KEY=your-60db-key
+SIXTYDB_DEFAULT_VOICE_ID=your-60db-voice-uuid   # optional; list yours at GET https://api.60db.ai/myvoices
+```
+
+A request can also override the global default per call by passing a `provider`
+field (`"elevenlabs"` or `"60db"`) to `/api/speech`. Resolution order is:
+**request `provider` → `TTS_PROVIDER` env → `elevenlabs`**. An unknown value
+falls back to the default rather than failing.
+
+### How it's wired
+| File | Role |
+|------|------|
+| `lib/tts/schema.ts` | Shared request schema + `resolveProvider()` |
+| `lib/tts/elevenlabs.ts` | ElevenLabs backend (`xi-api-key`, raw `audio/mpeg` passthrough) |
+| `lib/tts/sixtydb.ts` | 60db backend — decodes 60db's base64 JSON/NDJSON into an `audio/mpeg` stream |
+| `app/api/speech/route.ts` | Edge route that picks a provider and dispatches |
+| `lib/tts.client.ts` | Browser helper `EXPERIMENTAL_speakTextStream(text, voiceId, provider?)` + streaming player |
+
+### Notes on 60db
+- Auth is `Authorization: Bearer <key>` (ElevenLabs uses `xi-api-key`).
+- 60db returns base64 audio inside JSON (`/tts-synthesize`) or NDJSON chunks
+  (`/tts-stream`); the route decodes both into raw mp3 so playback is identical.
+- 60db uses a single configured default voice. The per-filter voice IDs in
+  `lib/filters.ts` are ElevenLabs-specific and are intentionally ignored when
+  60db is active. To theme 60db voices per filter, map filter → 60db voice UUID.
 
 ## Adding New Components
 This application gets better with more components. If you have ideas for components that could augment the X experience, open a PR. 
